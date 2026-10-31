@@ -1,0 +1,5 @@
+CLAUDE.md
+.idea/
+data/
+__pycache__/
+scripts/testing.ipynb

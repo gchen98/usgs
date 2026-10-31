@@ -11,6 +11,7 @@ dependencies:
   - numpy=2.5.4
   - pytest=9.2.0
   - ipykernel=7.4.0
+  - nltk=3.10.4  # also needs: python -c "import nltk; nltk.download('punkt_tab')"
   # installed for exploring the API; not used by the scripts
   - sciencebasepy=2.0.22
   - r-base=4.5.3

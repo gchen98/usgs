@@ -27,11 +27,13 @@ python scripts/score.py            # -> data/derived/scores.csv
 python scripts/anomalies.py        # -> data/derived/anomalies.csv
 python scripts/search.py --eval    # recall@k on data/eval/queries.csv
 python scripts/search.py "irrigation water use in Kansas"
-python -m pytest -q                # 16 tests
+python scripts/cite.py "how much water do farms in Kansas use"   # results with evidence + links
+python -m pytest -q                # 22 tests
 ```
 
-The embedding model (`all-MiniLM-L6-v2`) downloads on the first search run; after that
-everything runs offline.
+The embedding model (`all-MiniLM-L6-v2`) downloads on the first search run, and `cite.py`
+needs the NLTK sentence tokenizer once (`python -c "import nltk; nltk.download('punkt_tab')"`);
+after that everything runs offline.
 
 ## Method
 
@@ -62,6 +64,11 @@ model's 256-token limit (median 177 tokens, 1 of 500 over), so no chunking was n
 **Evaluation.** 20 hand-written queries, each with one relevant item id chosen before
 searching: 10 "exact" (close to a title) and 10 "vague" (how a user might ask). Metric:
 recall@k, the share of relevant items in the top k.
+
+**Results with citations** (`scripts/cite.py`). For each top item, the summary is split into
+sentences (NLTK, which keeps "U.S." intact), each sentence is embedded, and the sentence most
+similar to the query is shown as evidence with the ScienceBase item link and DOI link when
+present. No LLM generation: the tool shows sources, it does not write answers.
 
 ## Results
 
@@ -105,25 +112,44 @@ Water in the United States County-Level Data for 2015" ahead of the labeled targ
 "National Water Use Projects". Those results are arguably more relevant: an evaluation
 (labeling) failure as much as a retrieval failure.
 
+**Citations** (one example query, "how much water do farms in Kansas use", top 5):
+
+- All 5 results are Kansas irrigation items. Three of them say "This U.S. Geological Survey
+  (USGS) Data Release provides..." yet carry no Data Release tag and no DOI: they are child
+  items of the 2014 Kansas irrigation data release, and the DOI and release tag live on the
+  parent item.
+- Item rank and best-passage similarity disagree: results 3–4 have the closest passages
+  (0.71, 0.70) but rank below results 1–2 (0.59, 0.58).
+- The best passages are descriptive ("This dataset describes irrigation water use in Kansas
+  in 2016.") and contain no numbers. Metadata search points to where an answer is (the data
+  files), not to the answer itself, which is the main reason I did not add LLM generation.
+
 ## Limitations
 
 - One topic, one search query, 500 items in relevance order: not a random sample of ScienceBase.
 - The completeness rules are my own heuristic with equal weights; different rules would give
   different scores. A higher score for data releases is a difference, not evidence that
   review caused it.
+- Scoring looks at each item alone and ignores the parent/child hierarchy. Child items of a
+  data release are counted as "other items" and fail `has_doi` even though their parent has
+  a DOI, so the data-release vs. other comparison is distorted in a direction I have not measured.
 - License and use-constraint information is not a top-level field in the item JSON. It likely
   sits in the attached metadata records (284 of 500 items have one), which I did not parse,
   so licensing is not scored.
 - The evaluation set is small (20 queries), hand-made by one person, with one relevant id per
   query. Exact queries were written from titles, so they are easy by construction.
 - Not tested: other embedding models, keyword (BM25) baseline, chunking of the longer `body`
-  field, answer generation, and any real user queries or logs.
+  field, re-ranking by passage similarity, answer generation, and any real user queries or logs.
+- The citation output was inspected on example queries only; passage quality was not
+  measured.
 
 ## What I'd do next
 
+- Make scoring hierarchy-aware: inherit data-release status and DOI from the parent item,
+  then re-run the comparison.
 - Parse the attached FGDC/XML metadata for use constraints and attribute definitions, and
   score license and data-dictionary presence.
 - Compare against a keyword baseline and a second embedding model.
 - Grow the evaluation set with multiple relevant ids per query, judged by more than one person.
 - Treat folder/child title matches separately in duplicate detection.
-- Show retrieved passages with item links as citations (milestone M4).
+- Re-rank by best-passage similarity and check whether recall@k changes.

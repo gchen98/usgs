@@ -7,7 +7,7 @@
 | M1 | 2 h | ~0.5 h (est.) | Done Thu Oct 29; 500 items, 197 data releases |
 | M2 | 3 h | ~2+ h so far (est.) | Scores + 3 anomaly checks done, 11 tests pass; left: findings table, explain-back |
 | M3 | 3 h | | Done Fri Oct 30: 20 queries, recall@1/5/10 = 0.35/0.85/0.95 |
-| M4 (opt.) | 2 h | | |
+| M4 (opt.) | 2 h | | Done Sat Oct 31: cite.py, evidence passages + links; no generation (by choice) |
 | M5 | 1.5 h | | |
 
 ## Explain-back answers (my words)
@@ -74,9 +74,27 @@ Plain text = my words. *Italic "Feedback (Claude)"* lines = review notes to rehe
   - *Feedback (Claude): Overall recall@1/5/10 = 0.35/0.85/0.95 (exact 0.5/0.9/1.0, vague 0.2/0.8/0.9). The one miss, "water usage in the US", still has the stray quote on its id, and even with the id fixed in memory it misses at k=10. Its top results (e.g. "Estimated Use of Water in the United States County-Level Data for 2015") are arguably MORE relevant than the target "National Water Use Projects": a labeling problem, not only a retrieval failure. Single-id labels penalize good answers. A/B with typo fixed in memory: title only exact 1.00/1.00/1.00, vague 0.20/0.40/0.60; title + summary exact 0.50/0.90/1.00, vague 0.20/0.80/0.90. Adding the summary trades exact-title precision at rank 1 for much better vague recall at 5-10. No query has more than one relevant id yet.*
 ### M4
 - Why show citations? How would I evaluate answer quality?
+- (Oct 31) Predictions before building:
+  - Passage choice: I think returning the sentence closest in meaning is more satisfactory but in some cases the user may be looking for more of an "answer" in respond to a "question" and the whole summary could answer it better.
+  - *Feedback (Claude): Good trade-off: precision vs. context. Middle ground: the best-matching sentence plus its neighbor(s) as a small window. Note that embedding each sentence separately IS chunking (sentence-level chunks), which connects M4 back to the M3 chunking question.*
+  - Why citations: I'd like citations to easily link to for further information. it also shows more authenticity.
+  - *Feedback (Claude): Yes. Sharper interview words: citations let the user VERIFY the claim against the source, and REACH the data itself (the item page and files: the A in FAIR). Say 'verifiability' or 'trust' instead of 'authenticity'.*
+  - LLM failure mode: it might hallucinate an intepretation that is not consistent with the retrieved result.
+  - *Feedback (Claude): Right: an unfaithful or ungrounded answer. The 'how to check' half is missing: require a citation on each sentence; check every cited id is among the retrieved items; hand-check a small set of answers, claim by claim, against the cited passages (faithfulness). Also: the answer can be faithful but wrong if retrieval picked the wrong items.*
+
+- (Oct 31) First cite.py run, "how much water do farms in Kansas use":
+  - *Feedback (Claude): All 22 tests pass; nltk handles "U.S." correctly. Findings from the output: (1) Results 1, 2 and 5 say "This USGS Data Release provides..." but are not tagged Data Release and show no DOI. They are child items of the 2014 Kansas irrigation data release; the DOI and release flag live on the PARENT. So M2's item-level `is_data_release` and `has_doi` undercount children of releases; scoring ignores the hierarchy. Strong interview point and a 'next step'. (2) Item rank and passage similarity disagree: results 3-4 have the best passages (0.71, 0.70) but rank below 1-2 (passages 0.59, 0.58); reranking by passage would reorder. (3) The best passages are boilerplate ("This dataset describes irrigation water use in Kansas in 2016.") and do not answer "how much": the numbers live in the data files, not the metadata. Metadata search tells you WHERE the answer is, not the answer. (4) The 2015 item has no DOI and no release tag; its parent is outside the sample, so its status is unknown.*
 
 ## Interview talk track
 - What I built (30 sec):
+In the past week, I built a small pipeline that runs a sample query "water use" on the sciencebase API to return a set of "items" that I could ask a series of questions. 1) is the quality of the metadata any different between items that are Data Releases vs non Data Releases and 2) How well can a search based on embedding vectors do compared to an exact string search?
+  - *Feedback (Claude): Fix before the interview: no exact-string or keyword search was ever run. "Exact" and "vague" are two kinds of QUERY, both run through the same embedding search. Accurate version: "...and 2) how well does embedding search find the right item for title-like queries vs. vague, plain-language ones?" Also "past week" -> "past few days". Comparing against a keyword baseline is a good "next step".*
 - What I learned / one thing that surprised me:
+I discovered that Data Releases can have substantially higher quality of metadata based on 5 quantitative heuristics I came up with. I also was surprised that a semantic search using embeddings could perform almost as well as exact search for a more permissive window (e.g. top 10 results)
+  - *Feedback (Claude): Reword to match what was measured: vague queries found the right item in the top 10 for 9 of 10 (recall@10 0.90 vs 1.00 for exact), but only 2 of 10 at rank 1. Adding the summary to the index doubled vague recall@5 (0.40 -> 0.80). For data releases, add the caveat that has_doi favors them by definition, and the gap holds on unrelated rules. Strong candidate for the 'surprise': the one miss was arguably a labeling failure, since search returned better items than my label.*
 - What I have NOT done (be direct):
+I haven't explored other metadata properties like license information, which would entail retrieving associated XML records for the SB items. It could be interesting to mine the information in each item deeper which may entail chunking during indexing.
+  - *Feedback (Claude): Be more direct and list the not-done items plainly: not USGS work, no production repository or data-release workflow, no Globus or large-file transfer, no FGDC/XML parsing, no keyword baseline, no real users or query logs, evaluation is 20 queries written by me.*
 - How it connects to the role's duties (metadata, discovery tools, FAIR, anomaly detection):
+I think this training exercise aligns well with the role duties in that I practiced hands tasks of accessing real SB data, derived heuristics based on FAIR principles, and discovered actual anomalies in live data.
+  - *Feedback (Claude): Good. Make it concrete with one example each: 4 data releases with no DOI identifier; duplicate-title flags where a folder and its child share a title (a false positive that taught me about ScienceBase structure). Say "public ScienceBase data" rather than implying internal access.*
