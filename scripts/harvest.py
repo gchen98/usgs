@@ -91,7 +91,7 @@ def harvest(query, target, out_root):
         n_items += len(page["items"])
         if "nextlink" not in page:
             break
-    if n_items < target:
+    if n_items < min(target,page['total']) :
         print(f"Warning! Did not fetch the requested number of items {target}!")
 
     print(f"Done: {n_items} items in {out_dir}")

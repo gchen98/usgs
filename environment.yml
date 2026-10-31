@@ -1,0 +1,22 @@
+# Recreate with: conda env create -f environment.yml
+# Versions recorded from the working `usgs` env on Oct 31 2026.
+name: usgs
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.15.2
+  - requests=2.34.2
+  - pandas=3.1.0
+  - numpy=2.5.4
+  - pytest=9.2.0
+  - ipykernel=7.4.0
+  # installed for exploring the API; not used by the scripts
+  - sciencebasepy=2.0.22
+  - r-base=4.5.3
+  - r-sbtools=1.4.1
+  - pip
+  - pip:
+      - scikit-learn==1.9.1
+      - sentence-transformers==6.2.0
+      - torch==2.15.0
