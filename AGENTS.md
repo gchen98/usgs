@@ -1,5 +1,8 @@
 # AGENTS.md — USGS-style FAIR Metadata Quality & Discovery Assistant
 
+> **Status (Nov 6):** Phase 1 (M0–M5 below) is complete and the USGS interview is done. Active
+> work is **Phase 2: local agent**, at the end of this file.
+
 A small, time-boxed learning project by Gary Chen, built to prepare for a USGS Science Data
 Management interview on **Wednesday Nov 4, 11:00 AM PST** (Pacific; DST ends Sun Nov 1). It uses **public**
 metadata from USGS ScienceBase. It is an independent learning project, **not USGS work**, and
@@ -67,3 +70,45 @@ extra metadata fields. Never cut M5 or the explain-backs.
 ## Session start checklist
 Read this file and `LEARNING_LOG.md`. Say which milestone we are in, time used vs. budget, and
 what the next smallest step is. Keep responses short; prefer questions over lectures.
+
+---
+
+## Phase 2: Local agent (LangGraph + llama.cpp)
+
+A learning project, started Nov 6, 2026: a chat assistant that answers questions about the
+harvested ScienceBase items by calling the Phase 1 code as tools, in a ReAct loop (the model
+reasons, picks a tool, reads its result, repeats, then answers). Code lives in `agent/`.
+Same honesty rules as Phase 1. No deadline, so **no time-boxes**; stop a milestone when Gary can
+explain it, not when it's polished.
+
+**Who it helps (say this in interviews):** a non-programmer can ask "which data releases are
+missing DOIs?" and get an answer with sources and a chart. Relevant to the Bureau of
+Reclamation duties (USAJOBS 890538900: AI/ML applications, data quality, dashboards,
+translating results for decision makers). It does not cover Tableau or Power Platform.
+
+### Roles (changed from Phase 1)
+**Gary writes nearly everything, including plumbing.** Claude: briefs and predict questions,
+interface specs (function signatures, inputs/outputs), tests, pointers to the official docs,
+reviews, and explain-back questions. Claude writes code only for environment installs, or via
+the escape hatch (stuck >20 min: annotated version + a small re-implementation exercise).
+Record explain-backs and feedback in `agent/LEARNING_LOG.md` (feedback in italics under Gary's words). The Phase 1 log now lives in `~/analysis/interviews/USAjobs-885233000/`; the copy in this repo root is older (Oct 31).
+
+### Milestones
+| | Milestone | Done when |
+|---|---|---|
+| A0 | Model server | `llama-server` runs Llama 3.1 8B Q4_K_M from a launch script; a benchmark script reports prompt and generation tokens/s and seconds per call, from real runs |
+| A1 | Tools | 4–5 tools wrapping search / score / anomalies / cite (+ a chart tool), each with a clear description and argument schema; unit tests pass without the model |
+| A2 | ReAct graph by hand | State, agent node, tool node, conditional edge, step limit; Gary can draw the graph and trace one question through it. Then compare with the prebuilt `create_react_agent` |
+| A3 | Evaluation | ~15 hand-written requests with expected tool(s); report right-tool rate, right-argument rate, whether numbers in answers match tool outputs, seconds per question |
+| A4 | Dashboard | A Streamlit page: score and anomaly charts + a chat panel using the agent |
+| A5 | Write-up | README section with real numbers and limits; talk track for Reclamation |
+| A6 (optional) | Modal GPU backend | Same OpenAI-compatible API served from a Modal GPU; the agent switches backends by config only; the endpoint requires a key; compare speed and cost |
+
+### Technical decisions (change only with a reason)
+- Model: Llama 3.1 8B Instruct Q4_K_M at `~/models/`, served by `~/code/llama.cpp/build/bin/llama-server`
+  (CPU only: 4-core Ryzen 3 1200, 30 GB RAM). Bind to `127.0.0.1`. Its OpenAI-compatible
+  `/v1/chat/completions` endpoint is the only interface the agent uses, so the backend can change.
+- Agent: LangGraph with an OpenAI-compatible chat client. Check current LangGraph docs and
+  versions before writing code; APIs change quickly. Record versions in `environment.yml`.
+- Tools call the Phase 1 functions directly; no new data harvesting.
+- No API keys or tokens in the repo (Modal secrets stay in Modal).

@@ -64,7 +64,7 @@ def dup_titles(check_name,items):
             title = item['title']
             title_clusters[title].append(id)
             if title in title_set:
-                detail = f'Duplicate title of {title}, ids so far are {title_clusters[title]}'
+                detail = f'Duplicate title'
                 anomalies.append((id,check_name,detail))
             else:
                 title_set.add(title)

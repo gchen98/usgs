@@ -15,6 +15,7 @@ import csv
 import hashlib
 import sys
 from pathlib import Path
+from functools import lru_cache
 
 import numpy as np
 
@@ -46,9 +47,11 @@ def recall_at_k(ranked_ids, relevant_ids, k):
 
 # --- Plumbing ----------------------------------------------------------------------
 
+
 def get_model():
     from sentence_transformers import SentenceTransformer  # slow import; only when needed
     return SentenceTransformer(MODEL_NAME)
+
 
 
 def build_index(items, model):

@@ -12,9 +12,11 @@ import glob
 import json
 from pathlib import Path
 
+
 import pandas as pd
 
-RAW_GLOB = "data/raw/water_use/*.json"
+# RAW_GLOB = "data/raw/water_use/*.json"
+RAW_GLOB = str(Path(__file__).resolve().parents[1] / "data/raw/water_use/*.json")
 OUT_PATH = Path("data/derived/scores.csv")
 
 
@@ -83,8 +85,11 @@ def score_item(item):
     return result
 
 
+
 def load_items(pattern=RAW_GLOB):
-    return [i for f in sorted(glob.glob(pattern)) for i in json.loads(Path(f).read_text())["items"]]
+    items = [i for f in sorted(glob.glob(pattern)) for i in json.loads(Path(f).read_text())["items"]]
+    assert len(items)>0,"Couldn't load any items!"
+    return items
 
 
 def score_all(items):

@@ -20,4 +20,8 @@ dependencies:
   - pip:
       - scikit-learn==1.9.1
       - sentence-transformers==6.2.0
+      - langgraph==1.2.20
+      - langchain-core==1.7.7
+      - langchain-openai==1.7.4
+      - langchain==1.4.10
       - torch==2.15.0
