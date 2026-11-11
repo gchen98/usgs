@@ -153,3 +153,84 @@ Water in the United States County-Level Data for 2015" ahead of the labeled targ
 - Grow the evaluation set with multiple relevant ids per query, judged by more than one person.
 - Treat folder/child title matches separately in duplicate detection.
 - Re-rank by best-passage similarity and check whether recall@k changes.
+
+---
+
+## Addendum: a local tool-calling agent (LangGraph + llama.cpp)
+
+A follow-up learning project (Nov 6–11, 2026) to understand how an LLM agent is wired: a chat
+assistant that answers questions about the 500 harvested items by calling the code above as
+tools, in a ReAct loop (the model picks a tool, reads its result, repeats, then answers). It
+runs entirely on my own machine. Like the rest of this repo, it is a learning project on public
+data, not USGS work, and not production software.
+
+### What I built
+
+- **Local model server.** Llama 3.1 8B Instruct (4-bit GGUF) served by `llama-server`
+  (llama.cpp) on CPU only (4-core Ryzen 3 1200, 30 GB RAM), through its OpenAI-compatible API,
+  so the backend can be swapped by changing one URL.
+- **Four tools** (`agent/tools.py`) wrapping the Phase 1 code: `search_items` (embedding
+  search), `item_details`, `score_summary` (completeness scores by group) and `find_anomalies`.
+  Each returns compact text (at most 1,200 characters), returns a message instead of raising on
+  bad input, and caches its data once per process. The four tool schemas the model sees on
+  every call total 2,046 characters.
+- **The agent graph, written by hand** with LangGraph (`agent/graph.py`, diagram in
+  `docs/graph.mermaid`): state with a message reducer and a step counter, an agent node, a tool
+  node I wrote myself (unknown tools, bad arguments and tool exceptions become error messages
+  the model can act on), a conditional edge, and a step limit (`MAX_STEPS = 4`).
+- **Tests without the model.** A scripted fake model drives the graph through direct answers,
+  tool round trips, two tool calls in one reply, the three error cases and a looping model.
+  The agent's tool and graph tests (28) and the full suite (50) pass.
+- **Comparison with the prebuilt agent** (`langchain.agents.create_agent`) on the same model,
+  prompt and tools (`agent/compare.py`).
+
+### Results (all from real runs on the machine above)
+
+**Speed is dominated by the model, and by what it has to read.** Benchmark (`agent/bench.py`):
+
+| Case | Read | Write 128 tokens | Total |
+|---|---|---|---|
+| 1,812-token prompt, cold | 296.6 s (6.1 tokens/s) | 51.5 s (2.5 tokens/s) | 348 s |
+| Same prompt, cached prefix | 0.6 s | 54.0 s | 54.6 s |
+
+This set the design rules: a short, fixed system prompt and tool list so they stay cached;
+compact tool results, because every new token is read at about 6 tokens/s; capped replies.
+
+**Agent runs:**
+- "How many data releases are missing a DOI?" called `find_anomalies` with the right check
+  and answered 4, matching the tool output: 99.6 s.
+- "Find five items about water use": 52.2 s (choose tool 8.2 s, tool 6.3 s, answer 37.7 s).
+  Asking for 5 results instead of 10 cut the answer step from 68 s to 38 s, because the model
+  had about half as many new tokens to read (≈204 vs ≈413).
+
+**Hand-built vs. prebuilt agent** ("Give me details on item with ID Gary", 2 warm-up + 3 timed
+runs each): both agents made the same 4 model calls with the same tools and arguments, read the
+same number of new tokens per call and gave the same answer in every run (temperature 0). Mean
+times were 156.0 s (hand-built) and 163.3 s (prebuilt); with identical model work, I read that
+as run-to-run noise, not a framework difference.
+
+**Failure modes I saw** (examples, not rates):
+- With the tools accidentally not attached to the model, it still answered confidently with a
+  made-up count ("123 items found"): a clear hallucination.
+- It often described results instead of giving them ("the results are shown above"), even
+  though the user never sees tool output, and named tools despite being told not to.
+- It sent integer arguments as strings (`"k": "10"`); schema validation quietly converted them.
+- A tool's helpful hint misled it: after an unknown id, it searched for that id, took a match
+  with similarity 0.18 and reported an unrelated item.
+
+### Limitations and not done
+
+- No systematic accuracy measurement yet: the runs above are a handful of examples. An
+  evaluation harness (hand-written cases; right tool, right arguments, numbers grounded in
+  tool output) was designed but not implemented or run.
+- One small model on a slow CPU; a larger model or a GPU backend was not tested.
+- No user interface beyond the command line; no real users.
+
+### Reproduce
+
+```bash
+agent/serve.sh                                         # start llama-server (model path inside)
+HF_HUB_OFFLINE=1 python agent/graph.py "How many data releases are missing a DOI?"
+python agent/compare.py "Give me details on item with ID Gary" --graph custom --iterations 5 --warmupsteps 2
+python -m pytest -q tests/test_agent_tools.py tests/test_agent_graph.py
+```
