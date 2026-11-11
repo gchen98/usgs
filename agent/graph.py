@@ -32,7 +32,7 @@ from langgraph.graph import add_messages
 from langgraph.graph.state import StateGraph
 from functools import partial
 
-
+MAX_TOKENS = 256
 MAX_STEPS = 4          # max agent turns that may call tools
 BASE_URL = "http://127.0.0.1:8080/v1"
 
@@ -48,7 +48,7 @@ class AgentState(TypedDict):
     steps: int                                  # agent turns so far
 
 
-def make_llm(tools, base_url=BASE_URL, max_tokens=512):
+def make_llm( base_url=BASE_URL, max_tokens=512):
     """A chat model pointed at llama-server, with the tool schemas bound. Returns the runnable."""
 
 
@@ -65,7 +65,9 @@ def make_llm(tools, base_url=BASE_URL, max_tokens=512):
         # organization="...",
         # other params...
     )
-    return model.bind_tools(tools=tools)
+    return model
+
+
 
     # raise NotImplementedError
 
@@ -142,6 +144,56 @@ def ask(graph, question):
 
     # raise NotImplementedError
 
+def runner(stream:bool,query:str,render:bool):
+    from tools import TOOLS
+    llm = make_llm( base_url=BASE_URL, max_tokens=MAX_TOKENS).bind_tools(tools=TOOLS)
+
+
+    graph = build_graph(llm=llm, tools=TOOLS)
+    if render:
+        print(graph.get_graph().draw_mermaid())
+        sys.exit(0)
+    import time
+
+    if query:
+        if stream:
+            input_messages = [HumanMessage(content=query)]
+            total_time = 0
+            start = time.perf_counter()
+            message_generator = graph.stream({'messages': input_messages, 'steps': 0}, stream_mode=['updates'],
+                                             version='v2')
+            for chunk in message_generator:
+                if chunk["type"] == "updates":
+                    for node_name, state in chunk["data"].items():
+                        # print(f"Raw message: {state['messages']}")
+                        message = state['messages'][0]
+                        if hasattr(message, 'tool_calls') and len(message.tool_calls) > 0:
+                            out_list = []
+                            for tool_call in message.tool_calls:
+                                out_list.append(f"{tool_call['name']}({tool_call['args']})")
+                            summary = ",".join(out_list)
+                        else:
+                            summary = message.content
+                        end = time.perf_counter()
+                        elapsed = end - start
+                        total_time += elapsed
+                        print(f"[{elapsed:.2f}s] {node_name} summary: {summary}")
+                        start = end
+            print(f"total {total_time:.2f}s")
+        else:
+            messages = ask(graph, query)
+            for message in messages['messages']:
+                # end = time.perf_counter()
+                # elapsed = end - start
+                print(f"Message: {message.content_blocks}")
+                if hasattr(message, 'usage_metadata'):
+                    usage_metadata = message.usage_metadata
+                    print(
+                        f"input_tokens {usage_metadata.get('input_tokens', '')} output_tokens {usage_metadata.get('input_tokens', '')} cached tokens {usage_metadata.get('input_token_details', {}).get('cache_read', '')}")
+                if hasattr(message, 'tool_calls'):
+                    tool_calls = message.tool_calls
+                    print(f"Tool calls {tool_calls}")
+                # start = end
 
 def main():
     """CLI: build the real llm and graph, ask the question from argv, print each step with
@@ -150,47 +202,7 @@ def main():
     parser.add_argument("query", nargs="?")
     parser.add_argument('--render',action='store_true')
     args = parser.parse_args()
-    from tools import TOOLS
-
-    llm = make_llm(tools=TOOLS,base_url=BASE_URL,max_tokens=256)
-    graph = build_graph(llm=llm,tools=TOOLS)
-    if args.render:
-        print(graph.get_graph().draw_mermaid())
-        sys.exit(0)
-    import time
-    stream = True
-    if args.query:
-        if stream:
-            input_messages = [HumanMessage(content=args.query)]
-            total_time=0
-            start = time.perf_counter()
-            message_generator =  graph.stream({'messages': input_messages,'steps':0},stream_mode=['updates'],version='v2')
-            for chunk in message_generator:
-                if chunk["type"] == "updates":
-                    for node_name, state in chunk["data"].items():
-                        # print(f"Raw message: {state['messages']}")
-                        message = state['messages'][0]
-                        if hasattr(message,'tool_calls') and len(message.tool_calls)>0:
-                            out_list=[]
-                            for tool_call in message.tool_calls:
-                                out_list.append(f"{tool_call['name']}({tool_call['args']})")
-                            summary = ",".join(out_list)
-                        else:
-                            summary = message.content
-                        end = time.perf_counter()
-                        elapsed = end-start
-                        total_time += elapsed
-                        print(f"[{elapsed:.2f}s] {node_name} summary: {summary}")
-                        start = end
-            print(f"total {total_time:.2f}s")
-        else:
-            messages = ask(graph,args.query)
-            for m in messages['messages']:
-                # end = time.perf_counter()
-                # elapsed = end - start
-                print(f"Message: {m}")
-                # start = end
-    # raise NotImplementedError
+    runner(stream=True,query = args.query,render = args.render)
 
 
 if __name__ == "__main__":
